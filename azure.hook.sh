@@ -7,10 +7,21 @@
 # Debug Logging level
 DEBUG=3
 
+# Azure Tenant specific configuration settings
+#   You should create an SPN in Azure first and authorize it to make changes to Azure DNS
+#       REF: https://azure.microsoft.com/en-us/documentation/articles/resource-group-create-service-principal-portal/
+TENANT="<tenant name>.onmicrosoft.com"      # Your tenant name - the onmicrosoft.com value
+SPN_USERNAME="<spn uri id or guid>"         # This is one of the SPN values (the identifier-uri or guid value)
+SPN_PASSWORD="<password>"                   # This is the password associated with the SPN account
+RESOURCE_GROUP="<resource group name>"      # This is the resource group containing your Azure DNS instance
+DNS_ZONE="<dns zone name>"                  # This is the DNS zone you want the SPN to manage (Contributor access)
+TTL="<time in seconds>"                     # This is the TTL for the dnz record-set
+
+
 # Supporting functions
 function log {
     if [ $DEBUG -ge $2 ]; then
-        echo $1 > /dev/tty
+        echo "$1" > /dev/tty
     fi
 }
 function login_azure {
@@ -20,39 +31,44 @@ function login_azure {
     azure login -u ${SPN_USERNAME} -p ${SPN_PASSWORD} --tenant ${TENANT} --service-principal --quiet > /dev/null
 }
 function parseSubDomain {
-    log "  Parse SubDomain" 3
+    log "  Parse SubDomain" 4
 
     FQDN="$1"
-    log "    FQDN: '${FQDN}''" 3
+    log "    FQDN: '${FQDN}''" 4
 
     DOMAIN=`sed -E 's/(.*)\.(.*\..*$)/\2/' <<< "${FQDN}"`
     log "    DOMAIN: '${DOMAIN}'" 4
 
     SUBDOMAIN=`sed -E 's/(.*)\.(.*\..*$)/\1/' <<< "${FQDN}"`
-    log "    SUBDOMAIN: '${SUBDOMAIN}'" 3
+    log "    SUBDOMAIN: '${SUBDOMAIN}'" 4
 
     echo "${SUBDOMAIN}"
 }
 function buildDnsKey {
-    log "  Build DNS Key" 3
+    log "  Build DNS Key" 4
 
     FQDN="$1"
-    log "    FQDN: '${FQDN}'" 3
+    log "    FQDN: '${FQDN}'" 4
 
     SUBDOMAIN=$(parseSubDomain ${FQDN})
-    log "    SUBDOMAIN: ${SUBDOMAIN}" 3
+    log "    SUBDOMAIN: ${SUBDOMAIN}" 4
 
     CHALLENGE_KEY="_acme-challenge.${SUBDOMAIN}"
-    log "    KEY: '${CHALLENGE_KEY}'" 3
+    log "    KEY: '${CHALLENGE_KEY}'" 4
 
     echo "${CHALLENGE_KEY}"
 }
 
+
+# Logging the header
 log "Azure Hook Script - LetsEncrypt" 4
+
 
 # Execute the specified phase
 PHASE="$1"
+log "" 1
 log "  Phase: '${PHASE}'" 1
+#log "    Arguments: ${1} | ${2} | ${3} | ${4} | ${5} | ${6} | ${7} | ${8} | ${9} | ${10}" 1
 case ${PHASE} in
     'deploy_challenge')
         login_azure
@@ -61,7 +77,7 @@ case ${PHASE} in
         FQDN="$2"
         TOKEN_VALUE="$4"
         SUBDOMAIN=$(parseSubDomain ${FQDN})
-        CHALLENGE_KEY=$(buildDnsKey ${$FQDN})
+        CHALLENGE_KEY=$(buildDnsKey ${FQDN})
 
         # Commands
         log "" 4
@@ -79,7 +95,7 @@ case ${PHASE} in
         FQDN="$2"
         TOKEN_VALUE="$4"
         SUBDOMAIN=$(parseSubDomain ${FQDN})
-        CHALLENGE_KEY=$(buildDnsKey ${$FQDN})
+        CHALLENGE_KEY=$(buildDnsKey ${FQDN})
 
         # Commands
         log "" 4
@@ -89,22 +105,32 @@ case ${PHASE} in
         ;;
 
     "deploy_cert")
+        # Parameters:
+        # - PHASE           - the phase being executed
+        # - DOMAIN          - the domain name (CN or subject alternative name) being validated.
+        # - KEY_PATH        - the path to the certificate's private key file
+        # - CERT_PATH       - the path to the certificate file
+        # - FULL_CHAIN_PATH - the path to the full chain file
+        # - CHAIN_PATH      - the path to the chain file
+        # - TIMESTAMP       - the timestamp of the deployment
+
         # do nothing for now
-        log "  Arguments: ${1} | ${2} | ${3} | ${4} | ${5}" 1
         ;;
 
     "unchanged_cert")
         # Parameters:
-        # - PHASE         - the phase being executed
-        # - DOMAIN        - the domain name (CN or subject alternative name) being validated.
-        # - KEY_PATH      - the path to the certificate's private key file
-        # - CERT_PATH     - the path to the certificate files
+        # - PHASE           - the phase being executed
+        # - DOMAIN          - the domain name (CN or subject alternative name) being validated.
+        # - KEY_PATH        - the path to the certificate's private key file
+        # - CERT_PATH       - the path to the certificate file
+        # - FULL_CHAIN_PATH - the path to the full chain file
+        # - CHAIN_PATH      - the path to the chain file
 
         # do nothing for now
         ;;
 
     *)
-        log "Unknown hook '${1}'" 1
+        log "Unknown hook '${PHASE}'" 1
         exit 1
         ;;
 esac
